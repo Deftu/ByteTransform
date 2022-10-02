@@ -5,9 +5,11 @@ import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.tree.ClassNode
 import xyz.unifycraft.bytetransform.config.TransformationConfig
 import xyz.unifycraft.bytetransform.config.TransformationData
+import xyz.unifycraft.bytetransform.transformations.TransformationHandler
+import java.util.concurrent.CopyOnWriteArrayList
 
 object ByteTransform {
-    private val configs = mutableListOf<TransformationConfig>()
+    private val configs = CopyOnWriteArrayList<TransformationConfig>()
     private lateinit var environment: Environment
     var debug: Boolean
         get() = System.getProperty("bt.debug", "false").toBoolean()
@@ -38,7 +40,28 @@ object ByteTransform {
         addConfigFile(file, javaClass.classLoader)
 
     @JvmStatic
+    fun initialize() {
+        for (config in configs) {
+            for (transformation in config.globalTransformations) {
+                transformation.initialize(config.packageName)
+            }
+
+            for (transformation in when (environment) {
+                Environment.CLIENT -> config.clientTransformations
+                Environment.SERVER -> config.serverTransformations
+            }) {
+                transformation.initialize(config.packageName)
+            }
+        }
+    }
+
+    @JvmStatic
     fun handle(className: String, classBytes: ByteArray): ByteArray {
+        if (configs.none { config ->
+            config.hasTransformationFor(className)
+        }) return classBytes
+        repeat(10) { println("This class ($className) has transformations") }
+
         val node = ClassNode()
         val reader = ClassReader(classBytes)
         reader.accept(node, ClassReader.EXPAND_FRAMES)
@@ -53,7 +76,8 @@ object ByteTransform {
             transformations.reverse()
 
             for (transformation in transformations) {
-                transformation.handle(node)
+                println("transforming $className using ${transformation.name}")
+                TransformationHandler.handle("${config.packageName}.${transformation.name}", node)
             }
         }
 

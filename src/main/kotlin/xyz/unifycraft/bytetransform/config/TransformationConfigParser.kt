@@ -9,10 +9,13 @@ internal object TransformationConfigParser {
 
     fun parse(input: String): TransformationConfig {
         return JsonReader(input.reader()).use { reader ->
+            var packageName = ""
             var required = false
             val globalTransformations = mutableListOf<TransformationData>()
             val clientTransformations = mutableListOf<TransformationData>()
             val serverTransformations = mutableListOf<TransformationData>()
+
+            reader.beginObject()
 
             var currentName = ""
             while (reader.hasNext()) {
@@ -23,6 +26,11 @@ internal object TransformationConfigParser {
                 }
 
                 when (currentName) {
+                    "package" -> {
+                        if (token != JsonToken.STRING)
+                            throw IllegalArgumentException("Transformation config's 'package' property should be a string!")
+                        packageName = reader.nextString()
+                    }
                     "required" -> {
                         if (token != JsonToken.BOOLEAN)
                             throw IllegalArgumentException("Transformation config's 'required' property should be a boolean!")
@@ -32,14 +40,18 @@ internal object TransformationConfigParser {
                     "client" -> clientTransformations.addAll(TransformationDataParser.parse(reader, token))
                     "server" -> serverTransformations.addAll(TransformationDataParser.parse(reader, token))
                     else -> {
-                        logger.warn("Unknown property found? Skipping! ($currentName)")
+                        logger.warn("Unknown property found while parsing transformation config? Skipping! ($currentName)")
                         reader.skipValue()
                         continue
                     }
                 }
             }
 
-            TransformationConfig(required, globalTransformations, clientTransformations, serverTransformations)
+            if (packageName.endsWith("."))
+                packageName = packageName.substring(0, packageName.lastIndexOf("."))
+
+            reader.endObject()
+            TransformationConfig(packageName, required, globalTransformations, clientTransformations, serverTransformations)
         }
     }
 }
@@ -73,7 +85,7 @@ private object TransformationDataParser {
 
     private fun parseString(reader: JsonReader): TransformationData {
         val string = reader.nextString()
-        return TransformationData(string, TransformationData.DEFAULT_PRIORITY, TransformationData.DEFAULT_OPTIONAL)
+        return TransformationData(string, emptyArray(), TransformationData.DEFAULT_PRIORITY, TransformationData.DEFAULT_OPTIONAL)
     }
 
     private fun parseObject(reader: JsonReader): TransformationData {
@@ -102,7 +114,7 @@ private object TransformationDataParser {
                     optional = reader.nextBoolean()
                 }
                 else -> {
-                    logger.warn("Unknown property found? Skipping! ($currentName)")
+                    logger.warn("Unknown property found while parsing transformation object? Skipping! ($currentName)")
                     reader.skipValue()
                     continue
                 }
@@ -110,6 +122,6 @@ private object TransformationDataParser {
         }
 
         reader.endObject()
-        return TransformationData(name, TransformationData.DEFAULT_PRIORITY, optional)
+        return TransformationData(name, emptyArray(), TransformationData.DEFAULT_PRIORITY, optional)
     }
 }

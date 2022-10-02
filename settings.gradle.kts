@@ -28,3 +28,5 @@ pluginManagement {
 val projectName: String = extra["project.name"]?.toString()
     ?: throw MissingPropertyException("Project name was not set!")
 rootProject.name = projectName
+
+include(":annotation-processor")
